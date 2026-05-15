@@ -226,6 +226,15 @@ public class RepositoryAndHandlerTests
 
             Assert.Equal(HttpStatusCode.Unauthorized, unauthorizedResponse.StatusCode);
 
+            using var preflightRequest = new HttpRequestMessage(HttpMethod.Options, $"http://127.0.0.1:{port}/mcp");
+            preflightRequest.Headers.Add("Origin", "http://localhost:6274");
+            preflightRequest.Headers.Add("Access-Control-Request-Method", "POST");
+            preflightRequest.Headers.Add("Access-Control-Request-Headers", "authorization,content-type");
+            using var preflightResponse = await httpClient.SendAsync(preflightRequest);
+
+            Assert.Equal(HttpStatusCode.NoContent, preflightResponse.StatusCode);
+            Assert.True(preflightResponse.Headers.Contains("Access-Control-Allow-Origin"));
+
             var transport = new HttpClientTransport(new HttpClientTransportOptions
             {
                 Name = "portable-context-mcp-http-test",

@@ -32,6 +32,17 @@ if (transport == "stdio")
 var webBuilder = WebApplication.CreateBuilder(args);
 ConfigureCommonServices(webBuilder.Services, webBuilder.Configuration);
 webBuilder.Services.AddSingleton<BearerTokenValidator>();
+webBuilder.Services.AddCors(options =>
+{
+    options.AddPolicy("McpCors", policy =>
+    {
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .WithExposedHeaders("Mcp-Session-Id");
+    });
+});
 
 webBuilder.Services
     .AddMcpServer()
@@ -45,6 +56,7 @@ var app = webBuilder.Build();
 EnsureHttpAuthConfigured(app.Services);
 
 app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
+app.UseCors("McpCors");
 
 app.UseWhen(
     context => context.Request.Path.StartsWithSegments("/mcp"),
@@ -52,6 +64,12 @@ app.UseWhen(
     {
         branch.Use(async (context, next) =>
         {
+            if (HttpMethods.IsOptions(context.Request.Method))
+            {
+                context.Response.StatusCode = StatusCodes.Status204NoContent;
+                return;
+            }
+
             var validator = context.RequestServices.GetRequiredService<BearerTokenValidator>();
             if (!validator.IsValid(context.Request.Headers.Authorization))
             {
