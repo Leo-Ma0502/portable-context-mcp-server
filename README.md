@@ -27,6 +27,8 @@ export PERSONAL_CONTEXT_MCP_TOKEN="replace-with-a-long-random-token"
 docker compose -f docker/docker-compose.yml up --build
 ```
 
+`PERSONAL_CONTEXT_MCP_TOKEN` is required. Docker Compose will fail fast if it is missing.
+
 Health check:
 
 ```bash
@@ -75,7 +77,7 @@ Use HTTPS for remote deployments.
 
 | Variable | Purpose |
 | --- | --- |
-| `PERSONAL_CONTEXT_MCP_TOKEN` | Docker Compose token shortcut |
+| `PERSONAL_CONTEXT_MCP_TOKEN` | Required Docker Compose token source |
 | `AUTH__TOKENS__0` | Bearer token for `/mcp` |
 | `DATABASE__PATH` | SQLite file path |
 | `SQLITEVEC__ENABLED` | Load sqlite-vec |
@@ -86,6 +88,12 @@ Use HTTPS for remote deployments.
 | `TRANSPORT` | `http` or `stdio` |
 
 `.env.example` is a template. Real secrets belong in `.env` or shell environment variables. `.env` is ignored by git.
+
+Example `.env`:
+
+```bash
+PERSONAL_CONTEXT_MCP_TOKEN=replace-with-a-long-random-token
+```
 
 ## Development
 

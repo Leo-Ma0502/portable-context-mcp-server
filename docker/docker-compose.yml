@@ -15,6 +15,6 @@ services:
       - SQLITEVEC__ENABLED=true
       - SQLITEVEC__REQUIRED=true
       - AUTH__MODE=BearerToken
-      - AUTH__TOKENS__0=${PERSONAL_CONTEXT_MCP_TOKEN:-change-me}
+      - AUTH__TOKENS__0=${PERSONAL_CONTEXT_MCP_TOKEN:?Set PERSONAL_CONTEXT_MCP_TOKEN}
     volumes:
       - ./data:/data
