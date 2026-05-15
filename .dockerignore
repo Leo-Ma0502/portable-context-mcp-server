@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/*.lscache
+.git/
+.github/
+.env
+docker/data/
+data/
+*.db
+*.db-journal
+.DS_Store

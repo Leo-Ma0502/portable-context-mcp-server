@@ -1,20 +1,27 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Options;
+using PortableContextMcpServer.Configuration;
 
 namespace PortableContextMcpServer.Services;
 
 public sealed class EmbeddingService : IEmbeddingService
 {
-    private const int Dimension = 128;
+    private readonly int _dimension;
+
+    public EmbeddingService(IOptions<EmbeddingSettings> settings)
+    {
+        _dimension = Math.Max(1, settings.Value.Dimension);
+    }
 
     public Task<float[]> CreateEmbeddingAsync(string text)
     {
         var normalized = text.Trim().ToLowerInvariant();
         using var sha256 = SHA256.Create();
         var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(normalized));
-        var vector = new float[Dimension];
+        var vector = new float[_dimension];
 
-        for (var index = 0; index < Dimension; index++)
+        for (var index = 0; index < _dimension; index++)
         {
             vector[index] = (hash[index % hash.Length] - 128) / 128f;
         }

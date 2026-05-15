@@ -6,5 +6,5 @@ public interface IContextRepository
 {
     Task InitializeAsync();
     Task<ContextEntry> SaveAsync(ContextEntry entry);
-    Task<IReadOnlyList<ContextEntry>> SearchAsync(float[] queryEmbedding, int limit);
+    Task<IReadOnlyList<ContextSearchResult>> SearchAsync(float[] queryEmbedding, int limit);
 }

@@ -2,7 +2,7 @@ namespace PortableContextMcpServer.Models;
 
 public sealed class VisibilityPolicy
 {
-    public static VisibilityPolicy Default => new() { AllowedCategories = new[] { "preference", "personality", "skill", "experience", "relationship", "memory" } };
+    public static VisibilityPolicy Default => new() { AllowedCategories = new[] { "preference", "personality", "skill", "experience", "relationship", "memory", "project" } };
 
     public string[] AllowedCategories { get; init; } = Array.Empty<string>();
     public string[] AllowedToolIds { get; init; } = Array.Empty<string>();

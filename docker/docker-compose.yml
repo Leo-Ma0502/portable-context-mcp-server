@@ -1,13 +1,20 @@
-version: "3.9"
 services:
-  portable-context-mcp-server:
+  personal-context-mcp:
     build:
       context: ..
       dockerfile: docker/Dockerfile
     ports:
-      - "6700:6700"
+      - "8080:8080"
     environment:
+      - ASPNETCORE_URLS=http://+:8080
+      - TRANSPORT=http
       - DATABASE__PATH=/data/context.db
-      - SERVER__PORT=6700
+      - EMBEDDING__PROVIDER=Hash
+      - EMBEDDING__MODEL=sha256-hash-v1
+      - EMBEDDING__DIMENSION=128
+      - SQLITEVEC__ENABLED=true
+      - SQLITEVEC__REQUIRED=true
+      - AUTH__MODE=BearerToken
+      - AUTH__TOKENS__0=${PERSONAL_CONTEXT_MCP_TOKEN:-change-me}
     volumes:
       - ./data:/data

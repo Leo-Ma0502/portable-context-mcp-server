@@ -23,18 +23,18 @@ public sealed class McpRequestHandler
     public async Task<GetContextResponse> HandleGetContextAsync(GetContextRequest request)
     {
         var queryEmbedding = await _embeddingService.CreateEmbeddingAsync(request.Query);
-        var entries = await _repository.SearchAsync(queryEmbedding, request.MaxResults);
-        var visible = entries
-            .Where(entry => _policyService.IsVisible(entry, request.ToolId))
+        var results = await _repository.SearchAsync(queryEmbedding, request.MaxResults);
+        var visible = results
+            .Where(result => _policyService.IsVisible(result.Entry, request.ToolId))
             .Select(entry => new ContextEntryDto
             {
-                Id = entry.Id,
-                Category = entry.Category,
-                Text = entry.Text,
-                SourceTool = entry.SourceTool,
-                CreatedAt = entry.CreatedAt,
-                UpdatedAt = entry.UpdatedAt,
-                Score = ComputeScore(queryEmbedding, entry.Embedding)
+                Id = entry.Entry.Id,
+                Category = entry.Entry.Category,
+                Text = entry.Entry.Text,
+                SourceTool = entry.Entry.SourceTool,
+                CreatedAt = entry.Entry.CreatedAt,
+                UpdatedAt = entry.Entry.UpdatedAt,
+                Score = entry.Score
             })
             .OrderByDescending(dto => dto.Score)
             .ToList();
@@ -64,21 +64,5 @@ public sealed class McpRequestHandler
             EntryId = entry.Id,
             Message = "Context entry saved."
         };
-    }
-
-    private static float ComputeScore(float[] query, float[] candidate)
-    {
-        if (query.Length != candidate.Length || query.Length == 0)
-        {
-            return 0f;
-        }
-
-        var score = 0f;
-        for (var i = 0; i < query.Length; i++)
-        {
-            score += query[i] * candidate[i];
-        }
-
-        return score;
     }
 }
