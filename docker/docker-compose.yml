@@ -1,0 +1,13 @@
+version: "3.9"
+services:
+  portable-context-mcp-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "6700:6700"
+    environment:
+      - DATABASE__PATH=/data/context.db
+      - SERVER__PORT=6700
+    volumes:
+      - ./data:/data

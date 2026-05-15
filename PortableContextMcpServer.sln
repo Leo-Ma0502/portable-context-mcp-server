@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{F8B29282-1503-41F6-ABDF-EF07DA0FF7CF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PortableContextMcpServer", "src\PortableContextMcpServer\PortableContextMcpServer.csproj", "{BFFD0F6A-64F4-4657-977C-171F03C0492F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{A80F318F-EDFA-4CFF-AAB1-1B92F4538CED}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PortableContextMcpServer.Tests", "tests\PortableContextMcpServer.Tests\PortableContextMcpServer.Tests.csproj", "{24DBE71C-68C8-4734-A732-1A7A515B56CB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BFFD0F6A-64F4-4657-977C-171F03C0492F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BFFD0F6A-64F4-4657-977C-171F03C0492F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BFFD0F6A-64F4-4657-977C-171F03C0492F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BFFD0F6A-64F4-4657-977C-171F03C0492F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{24DBE71C-68C8-4734-A732-1A7A515B56CB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{24DBE71C-68C8-4734-A732-1A7A515B56CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{24DBE71C-68C8-4734-A732-1A7A515B56CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{24DBE71C-68C8-4734-A732-1A7A515B56CB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{BFFD0F6A-64F4-4657-977C-171F03C0492F} = {F8B29282-1503-41F6-ABDF-EF07DA0FF7CF}
+		{24DBE71C-68C8-4734-A732-1A7A515B56CB} = {A80F318F-EDFA-4CFF-AAB1-1B92F4538CED}
+	EndGlobalSection
+EndGlobal

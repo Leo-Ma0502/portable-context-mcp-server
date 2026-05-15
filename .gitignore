@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.data/
+data/
+*.db
+*.db-journal
+.DS_Store

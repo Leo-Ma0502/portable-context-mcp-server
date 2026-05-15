@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE__PATH: ./data/ci-context.db
+      SERVER__PORT: 6700
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore PortableContextMcpServer.sln
+
+      - name: Build solution
+        run: dotnet build PortableContextMcpServer.sln --configuration Release --no-restore
+
+      - name: Run tests
+        run: dotnet test tests/PortableContextMcpServer.Tests/PortableContextMcpServer.Tests.csproj --configuration Release --no-restore --collect:"XPlat Code Coverage"
