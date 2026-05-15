@@ -19,6 +19,8 @@ Current MVP tools:
 - `get_context`: search saved context
 - `update_context`: save new context
 
+Current limitation: vector storage and search are wired through sqlite-vec, but embeddings still use a deterministic local hash provider. Real semantic embedding support is in progress.
+
 ## Get Started
 
 ```bash
@@ -73,6 +75,32 @@ Remote:
 
 Use HTTPS for remote deployments.
 
+## Quick Test With MCP Inspector
+
+```bash
+npx @modelcontextprotocol/inspector
+```
+
+Use:
+
+```text
+Transport Type: Streamable HTTP
+URL: http://localhost:8080/mcp
+```
+
+Add a custom header:
+
+```text
+Authorization: Bearer replace-with-a-long-random-token
+```
+
+The tool list should show:
+
+```text
+get_context
+update_context
+```
+
 ## Configuration
 
 | Variable | Purpose |
@@ -82,9 +110,7 @@ Use HTTPS for remote deployments.
 | `DATABASE__PATH` | SQLite file path |
 | `SQLITEVEC__ENABLED` | Load sqlite-vec |
 | `SQLITEVEC__REQUIRED` | Fail startup if sqlite-vec cannot load |
-| `EMBEDDING__PROVIDER` | Current default: `Hash` |
-| `EMBEDDING__MODEL` | Current default: `sha256-hash-v1` |
-| `EMBEDDING__DIMENSION` | Current default: `128` |
+| `EMBEDDING__DIMENSION` | Current hash embedding dimension, default: `128` |
 | `TRANSPORT` | `http` or `stdio` |
 
 `.env.example` is a template. Real secrets belong in `.env` or shell environment variables. `.env` is ignored by git.
