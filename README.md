@@ -10,6 +10,7 @@ Data stays in a local folder or self-hosted Docker volume.
 
 - Shared context for multiple MCP-compatible AI clients
 - Local SQLite storage with sqlite-vec vector search
+- Hash embeddings by default, optional Ollama embeddings with hash fallback
 - Remote MCP endpoint at `/mcp`
 - Bearer token protection
 - Docker Compose deployment
@@ -18,8 +19,6 @@ Current MVP tools:
 
 - `get_context`: search saved context
 - `update_context`: save new context
-
-Current limitation: vector storage and search are wired through sqlite-vec, but embeddings still use a deterministic local hash provider. Real semantic embedding support is in progress.
 
 ## Get Started
 
@@ -31,16 +30,24 @@ docker compose -f docker/docker-compose.yml up --build
 
 `PERSONAL_CONTEXT_MCP_TOKEN` is required. Docker Compose will fail fast if it is missing.
 
+The default host port is `8000`; the container still listens on `8080` internally.
+
 Health check:
 
 ```bash
-curl http://localhost:8080/healthz
+curl http://localhost:8000/healthz
 ```
 
 MCP endpoint:
 
 ```text
-http://localhost:8080/mcp
+http://localhost:8000/mcp
+```
+
+If port `8000` is already in use, set `HOST_PORT` in `docker/.env` or the shell:
+
+```bash
+HOST_PORT=18080 docker compose -f docker/docker-compose.yml up --build
 ```
 
 SQLite data:
@@ -55,7 +62,7 @@ Local:
 
 ```json
 {
-  "url": "http://localhost:8080/mcp",
+  "url": "http://localhost:8000/mcp",
   "headers": {
     "Authorization": "Bearer replace-with-a-long-random-token"
   }
@@ -85,7 +92,7 @@ Use:
 
 ```text
 Transport Type: Streamable HTTP
-URL: http://localhost:8080/mcp
+URL: http://localhost:8000/mcp
 ```
 
 Add a custom header:
@@ -110,7 +117,13 @@ update_context
 | `DATABASE__PATH` | SQLite file path |
 | `SQLITEVEC__ENABLED` | Load sqlite-vec |
 | `SQLITEVEC__REQUIRED` | Fail startup if sqlite-vec cannot load |
-| `EMBEDDING__DIMENSION` | Current hash embedding dimension, default: `128` |
+| `EMBEDDING__PROVIDER` | `Hash` or `Ollama`; default: `Hash` |
+| `EMBEDDING__MODEL` | Hash model label or Ollama embedding model name |
+| `EMBEDDING__DIMENSION` | Embedding dimension; must match the selected model |
+| `EMBEDDING__FALLBACKTOHASH` | Fall back to hash embeddings when Ollama is unavailable |
+| `EMBEDDING__TIMEOUTSECONDS` | Ollama request timeout |
+| `EMBEDDING__OLLAMA__ENDPOINT` | Ollama endpoint, for Docker on macOS usually `http://host.docker.internal:11434` |
+| `EMBEDDING__OLLAMA__APIKEY` | Optional bearer token for an Ollama-compatible endpoint |
 | `TRANSPORT` | `http` or `stdio` |
 
 `.env.example` is a template. Real secrets belong in `.env` or shell environment variables. `.env` is ignored by git.
@@ -119,6 +132,27 @@ Example `.env`:
 
 ```bash
 PERSONAL_CONTEXT_MCP_TOKEN=replace-with-a-long-random-token
+```
+
+Optional Ollama example:
+
+```bash
+PERSONAL_CONTEXT_MCP_TOKEN=replace-with-a-long-random-token
+EMBEDDING__PROVIDER=Ollama
+EMBEDDING__MODEL=nomic-embed-text
+EMBEDDING__DIMENSION=768
+EMBEDDING__OLLAMA__ENDPOINT=http://host.docker.internal:11434
+EMBEDDING__FALLBACKTOHASH=true
+```
+
+If Ollama is not configured, unavailable, or returns the wrong vector size, the server falls back to the deterministic hash embedding provider when `EMBEDDING__FALLBACKTOHASH=true`.
+
+The database records the embedding dimension at initialization. If `EMBEDDING__DIMENSION` changes later, startup fails with a clear dimension mismatch error. Keep the old dimension, or rebuild/re-embed the database. For a disposable Docker development database:
+
+```bash
+docker compose -f docker/docker-compose.yml down
+rm docker/data/context.db
+docker compose -f docker/docker-compose.yml up --build
 ```
 
 ## Development

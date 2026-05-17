@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -11,7 +12,7 @@ namespace PortableContextMcpServer.Services;
 
 public sealed class ContextRepository : IContextRepository
 {
-    private const int CurrentSchemaVersion = 1;
+    private const string EmbeddingDimensionMetadataKey = "embedding_dimension";
 
     private readonly string _databasePath;
     private readonly int _embeddingDimension;
@@ -66,6 +67,7 @@ public sealed class ContextRepository : IContextRepository
             }
 
             ApplyMigrations(connection);
+            EnsureEmbeddingDimensionCompatibility(connection);
             EnsureVectorSchema(connection);
             _initialized = true;
         }
@@ -197,11 +199,36 @@ public sealed class ContextRepository : IContextRepository
             );
             """);
 
-        if (GetAppliedVersion(connection) < 1)
+        var appliedVersion = GetAppliedVersion(connection);
+        if (appliedVersion < 1)
         {
             ApplySchemaVersion1(connection);
-            MarkMigrationApplied(connection, CurrentSchemaVersion);
+            MarkMigrationApplied(connection, 1);
         }
+
+        if (appliedVersion < 2)
+        {
+            ApplySchemaVersion2(connection);
+            MarkMigrationApplied(connection, 2);
+        }
+    }
+
+    private void EnsureEmbeddingDimensionCompatibility(SqliteConnection connection)
+    {
+        var storedDimension = GetStoredEmbeddingDimension(connection);
+        if (storedDimension is not null)
+        {
+            EnsureDimensionMatches(storedDimension.Value);
+            return;
+        }
+
+        var inferredDimension = InferExistingEmbeddingDimension(connection);
+        if (inferredDimension is not null)
+        {
+            EnsureDimensionMatches(inferredDimension.Value);
+        }
+
+        SetStoredEmbeddingDimension(connection, _embeddingDimension);
     }
 
     private void EnsureVectorSchema(SqliteConnection connection)
@@ -238,6 +265,16 @@ public sealed class ContextRepository : IContextRepository
             insert.Parameters.AddWithValue("$embedding", vector.EmbeddingJson);
             insert.ExecuteNonQuery();
         }
+    }
+
+    private void ApplySchemaVersion2(SqliteConnection connection)
+    {
+        ExecuteNonQuery(connection, """
+            CREATE TABLE IF NOT EXISTS app_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            """);
     }
 
     private void ApplySchemaVersion1(SqliteConnection connection)
@@ -332,6 +369,101 @@ public sealed class ContextRepository : IContextRepository
         command.Parameters.AddWithValue("$policy", JsonSerializer.Serialize(entry.VisibilityPolicy, _serializerOptions));
         command.Parameters.AddWithValue("$createdAt", entry.CreatedAt.ToString("O"));
         command.Parameters.AddWithValue("$updatedAt", entry.UpdatedAt.ToString("O"));
+    }
+
+    private int? GetStoredEmbeddingDimension(SqliteConnection connection)
+    {
+        if (!TableExists(connection, "app_metadata"))
+        {
+            return null;
+        }
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT value FROM app_metadata WHERE key = $key;";
+        command.Parameters.AddWithValue("$key", EmbeddingDimensionMetadataKey);
+        var value = command.ExecuteScalar()?.ToString();
+
+        return int.TryParse(value, out var dimension) ? dimension : null;
+    }
+
+    private void SetStoredEmbeddingDimension(SqliteConnection connection, int dimension)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO app_metadata(key, value)
+            VALUES ($key, $value)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+            """;
+        command.Parameters.AddWithValue("$key", EmbeddingDimensionMetadataKey);
+        command.Parameters.AddWithValue("$value", dimension.ToString());
+        command.ExecuteNonQuery();
+    }
+
+    private int? InferExistingEmbeddingDimension(SqliteConnection connection)
+    {
+        var vectorSchemaDimension = GetVectorTableDimension(connection);
+        if (vectorSchemaDimension is not null)
+        {
+            return vectorSchemaDimension;
+        }
+
+        if (!TableExists(connection, "context_entries"))
+        {
+            return null;
+        }
+
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT embedding_json
+            FROM context_entries
+            WHERE embedding_json IS NOT NULL AND embedding_json <> ''
+            LIMIT 1;
+            """;
+        var embeddingJson = command.ExecuteScalar()?.ToString();
+        if (string.IsNullOrWhiteSpace(embeddingJson))
+        {
+            return null;
+        }
+
+        var embedding = JsonSerializer.Deserialize<float[]>(embeddingJson, _serializerOptions);
+        return embedding?.Length;
+    }
+
+    private static int? GetVectorTableDimension(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT sql FROM sqlite_master WHERE name = 'context_vectors';";
+        var createSql = command.ExecuteScalar()?.ToString();
+        if (string.IsNullOrWhiteSpace(createSql))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(createSql, @"float\[(?<dimension>\d+)\]", RegexOptions.IgnoreCase);
+        return match.Success && int.TryParse(match.Groups["dimension"].Value, out var dimension)
+            ? dimension
+            : null;
+    }
+
+    private static bool TableExists(SqliteConnection connection, string tableName)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE name = $name;";
+        command.Parameters.AddWithValue("$name", tableName);
+        return (long)(command.ExecuteScalar() ?? 0L) > 0;
+    }
+
+    private void EnsureDimensionMatches(int databaseDimension)
+    {
+        if (databaseDimension == _embeddingDimension)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Embedding dimension mismatch. Database was initialized with dimension {databaseDimension}, but EMBEDDING__DIMENSION is {_embeddingDimension}. " +
+            "Use the original dimension, or rebuild/re-embed the database after changing embedding providers or models. " +
+            "For a disposable Docker development database, stop the server and delete docker/data/context.db, then start it again with the new embedding configuration.");
     }
 
     private IReadOnlyList<ContextSearchResult> SearchWithSqliteVec(SqliteConnection connection, float[] queryEmbedding, int limit)

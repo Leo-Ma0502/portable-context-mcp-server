@@ -4,14 +4,18 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     ports:
-      - "8080:8080"
+      - "${HOST_PORT:-8000}:8080"
     environment:
       - ASPNETCORE_URLS=http://+:8080
       - TRANSPORT=http
       - DATABASE__PATH=/data/context.db
-      - EMBEDDING__PROVIDER=Hash
-      - EMBEDDING__MODEL=sha256-hash-v1
-      - EMBEDDING__DIMENSION=128
+      - EMBEDDING__PROVIDER=${EMBEDDING__PROVIDER:-Hash}
+      - EMBEDDING__MODEL=${EMBEDDING__MODEL:-sha256-hash-v1}
+      - EMBEDDING__DIMENSION=${EMBEDDING__DIMENSION:-128}
+      - EMBEDDING__FALLBACKTOHASH=${EMBEDDING__FALLBACKTOHASH:-true}
+      - EMBEDDING__TIMEOUTSECONDS=${EMBEDDING__TIMEOUTSECONDS:-10}
+      - EMBEDDING__OLLAMA__ENDPOINT=${EMBEDDING__OLLAMA__ENDPOINT:-}
+      - EMBEDDING__OLLAMA__APIKEY=${EMBEDDING__OLLAMA__APIKEY:-}
       - SQLITEVEC__ENABLED=true
       - SQLITEVEC__REQUIRED=true
       - AUTH__MODE=BearerToken

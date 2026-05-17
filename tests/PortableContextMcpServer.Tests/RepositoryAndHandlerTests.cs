@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Net.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -17,6 +18,78 @@ namespace PortableContextMcpServer.Tests;
 
 public class RepositoryAndHandlerTests
 {
+    [Fact]
+    public async Task HashEmbeddingIsDeterministicAndUsesConfiguredDimension()
+    {
+        var embeddingSettings = Options.Create(new EmbeddingSettings { Dimension = 8 });
+        var embeddingService = new EmbeddingService(embeddingSettings);
+
+        var first = await embeddingService.CreateEmbeddingAsync("Local context");
+        var second = await embeddingService.CreateEmbeddingAsync(" local CONTEXT ");
+
+        Assert.Equal(8, first.Length);
+        Assert.Equal(first, second);
+    }
+
+    [Fact]
+    public async Task OllamaEmbeddingUsesRemoteVectorWhenConfigured()
+    {
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {"embeddings":[[1,2,3,4]]}
+                    """,
+                    System.Text.Encoding.UTF8,
+                    "application/json")
+            }));
+
+        var embeddingSettings = Options.Create(new EmbeddingSettings
+        {
+            Provider = "Ollama",
+            Model = "nomic-embed-text",
+            Dimension = 4,
+            Ollama = new OllamaEmbeddingSettings { Endpoint = "http://localhost:11434" }
+        });
+        var embeddingService = new EmbeddingService(
+            embeddingSettings,
+            NullLogger<EmbeddingService>.Instance,
+            httpClient);
+
+        var embedding = await embeddingService.CreateEmbeddingAsync("semantic text");
+
+        Assert.Equal(4, embedding.Length);
+        Assert.Equal(1f, MathF.Sqrt(embedding.Sum(value => value * value)), precision: 5);
+    }
+
+    [Fact]
+    public async Task OllamaEmbeddingFallsBackToHashWhenProviderFails()
+    {
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.InternalServerError)));
+
+        var embeddingSettings = Options.Create(new EmbeddingSettings
+        {
+            Provider = "Ollama",
+            Model = "nomic-embed-text",
+            Dimension = 8,
+            FallbackToHash = true,
+            Ollama = new OllamaEmbeddingSettings { Endpoint = "http://localhost:11434" }
+        });
+        var fallbackSettings = Options.Create(new EmbeddingSettings { Dimension = 8 });
+        var embeddingService = new EmbeddingService(
+            embeddingSettings,
+            NullLogger<EmbeddingService>.Instance,
+            httpClient);
+        var hashEmbeddingService = new EmbeddingService(fallbackSettings);
+
+        var embedding = await embeddingService.CreateEmbeddingAsync("semantic text");
+        var hashEmbedding = await hashEmbeddingService.CreateEmbeddingAsync("semantic text");
+
+        Assert.Equal(hashEmbedding, embedding);
+    }
+
     [Fact]
     public async Task SaveAndSearchContextEntryProducesRelevantResults()
     {
@@ -130,6 +203,94 @@ public class RepositoryAndHandlerTests
         command.CommandText = "SELECT COUNT(*) FROM context_vectors;";
 
         Assert.Equal(1L, command.ExecuteScalar());
+    }
+
+    [Fact]
+    public async Task InitializeFailsWhenDatabaseEmbeddingDimensionDiffers()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), $"context-{Guid.NewGuid()}.db");
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Database:Path"] = tempPath,
+                ["SqliteVec:Enabled"] = "false"
+            })
+            .Build();
+
+        var originalRepository = new ContextRepository(
+            config,
+            Options.Create(new EmbeddingSettings { Dimension = 4 }),
+            Options.Create(new SqliteVecSettings { Enabled = false }),
+            NullLogger<ContextRepository>.Instance);
+        await originalRepository.InitializeAsync();
+
+        var mismatchedRepository = new ContextRepository(
+            config,
+            Options.Create(new EmbeddingSettings { Dimension = 8 }),
+            Options.Create(new SqliteVecSettings { Enabled = false }),
+            NullLogger<ContextRepository>.Instance);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => mismatchedRepository.InitializeAsync());
+
+        Assert.Contains("Embedding dimension mismatch", exception.Message);
+        Assert.Contains("Database was initialized with dimension 4", exception.Message);
+        Assert.Contains("EMBEDDING__DIMENSION is 8", exception.Message);
+        Assert.Contains("delete docker/data/context.db", exception.Message);
+    }
+
+    [Fact]
+    public async Task InitializeFailsWhenLegacyVectorTableDimensionDiffers()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), $"context-{Guid.NewGuid()}.db");
+        using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={tempPath}"))
+        {
+            connection.Open();
+            connection.LoadExtension("vec0");
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at TEXT NOT NULL
+                );
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (1, '2026-01-01T00:00:00Z');
+
+                CREATE TABLE context_entries (
+                    id TEXT PRIMARY KEY,
+                    vector_rowid INTEGER NOT NULL UNIQUE,
+                    category TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    embedding_json TEXT NOT NULL,
+                    source_tool TEXT NOT NULL,
+                    visibility_policy_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE VIRTUAL TABLE context_vectors
+                USING vec0(embedding float[4]);
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Database:Path"] = tempPath,
+                ["SqliteVec:Enabled"] = "true",
+                ["SqliteVec:Required"] = "true"
+            })
+            .Build();
+        var repository = new ContextRepository(
+            config,
+            Options.Create(new EmbeddingSettings { Dimension = 8 }),
+            Options.Create(new SqliteVecSettings { Enabled = true, Required = true }),
+            NullLogger<ContextRepository>.Instance);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => repository.InitializeAsync());
+
+        Assert.Contains("Database was initialized with dimension 4", exception.Message);
+        Assert.Contains("EMBEDDING__DIMENSION is 8", exception.Message);
     }
 
     [Fact]
@@ -306,6 +467,12 @@ public class RepositoryAndHandlerTests
         processStartInfo.EnvironmentVariables["DATABASE__PATH"] = databasePath;
         processStartInfo.EnvironmentVariables["SQLITEVEC__ENABLED"] = "true";
         processStartInfo.EnvironmentVariables["SQLITEVEC__REQUIRED"] = "true";
+        processStartInfo.EnvironmentVariables["EMBEDDING__PROVIDER"] = "Ollama";
+        processStartInfo.EnvironmentVariables["EMBEDDING__MODEL"] = "nomic-embed-text";
+        processStartInfo.EnvironmentVariables["EMBEDDING__DIMENSION"] = "128";
+        processStartInfo.EnvironmentVariables["EMBEDDING__FALLBACKTOHASH"] = "true";
+        processStartInfo.EnvironmentVariables["EMBEDDING__TIMEOUTSECONDS"] = "1";
+        processStartInfo.EnvironmentVariables["EMBEDDING__OLLAMA__ENDPOINT"] = "http://127.0.0.1:1";
         processStartInfo.EnvironmentVariables["AUTH__MODE"] = "BearerToken";
         processStartInfo.EnvironmentVariables["AUTH__TOKENS__0"] = token;
 
@@ -346,5 +513,13 @@ public class RepositoryAndHandlerTests
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
         listener.Stop();
         return port;
+    }
+
+    private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> handler) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(handler(request));
+        }
     }
 }
