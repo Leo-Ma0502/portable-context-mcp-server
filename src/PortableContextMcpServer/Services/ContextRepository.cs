@@ -59,7 +59,7 @@ public sealed class ContextRepository : IContextRepository
                 Directory.CreateDirectory(folder);
             }
 
-            using var connection = OpenConnection();
+            using var connection = OpenConnection(loadVectorExtension: false);
             _sqliteVecAvailable = TryLoadVectorExtension(connection);
             if (_sqliteVecSettings.Required && !_sqliteVecAvailable)
             {
@@ -83,7 +83,7 @@ public sealed class ContextRepository : IContextRepository
 
         lock (_writeLock)
         {
-            using var connection = OpenConnection();
+            using var connection = OpenConnection(loadVectorExtension: _sqliteVecAvailable);
             using var transaction = connection.BeginTransaction();
 
             var vectorRowId = GetOrCreateVectorRowId(connection, transaction, entry.Id);
@@ -130,7 +130,7 @@ public sealed class ContextRepository : IContextRepository
         await InitializeAsync();
 
         var safeLimit = Math.Clamp(limit, 1, 100);
-        using var connection = OpenConnection();
+        using var connection = OpenConnection(loadVectorExtension: _sqliteVecAvailable);
 
         if (_sqliteVecAvailable)
         {
@@ -141,14 +141,19 @@ public sealed class ContextRepository : IContextRepository
         return SearchInMemory(connection, queryEmbedding, safeLimit);
     }
 
-    private SqliteConnection OpenConnection()
+    private SqliteConnection OpenConnection(bool loadVectorExtension)
     {
         var connection = new SqliteConnection($"Data Source={_databasePath}");
         connection.Open();
+        if (loadVectorExtension && !TryLoadVectorExtension(connection, logSuccess: false))
+        {
+            throw new InvalidOperationException("sqlite-vec was available during startup but could not be loaded for a database operation.");
+        }
+
         return connection;
     }
 
-    private bool TryLoadVectorExtension(SqliteConnection connection)
+    private bool TryLoadVectorExtension(SqliteConnection connection, bool logSuccess = true)
     {
         if (!_sqliteVecSettings.Enabled)
         {
@@ -164,7 +169,11 @@ public sealed class ContextRepository : IContextRepository
                 using var command = connection.CreateCommand();
                 command.CommandText = "SELECT vec_version();";
                 var version = command.ExecuteScalar()?.ToString() ?? "unknown";
-                _logger.LogInformation("Loaded sqlite-vec extension from {ExtensionPath}; version {Version}", extensionPath, version);
+                if (logSuccess)
+                {
+                    _logger.LogInformation("Loaded sqlite-vec extension from {ExtensionPath}; version {Version}", extensionPath, version);
+                }
+
                 return true;
             }
             catch (Exception exception)
