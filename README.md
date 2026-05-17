@@ -6,6 +6,10 @@ The project is aimed at people who move between Claude Desktop, Cursor, Copilot,
 
 Data stays in a local folder or self-hosted Docker volume.
 
+## Why This Exists
+
+AI tools do not share short-term memory with each other. Switching between clients often means re-explaining the same identity, preferences, project constraints, and working style, so this server provides a small user-owned context layer that any MCP-compatible client can query.
+
 ## Overview
 
 - Shared context for multiple MCP-compatible AI clients
@@ -77,12 +81,16 @@ Add a custom header under Authentication:
 Authorization: Bearer replace-with-a-long-random-token
 ```
 
+![MCP Inspector connection settings](docs/assets/inspector-connection.png)
+
 The tool list should show:
 
 ```text
 get_context
 update_context
 ```
+
+![MCP Inspector tools list](docs/assets/inspector-tools.png)
 
 Try `update_context`:
 
@@ -103,6 +111,8 @@ Then try `get_context`:
   "maxResults": 5
 }
 ```
+
+![MCP Inspector get_context form](docs/assets/inspector-get-context.png)
 
 ## Enable Ollama Embeddings
 
@@ -168,6 +178,10 @@ Remote:
 ```
 
 Use HTTPS for remote deployments.
+
+### Client Compatibility
+
+`localhost:8000` is intended for local clients and local testing tools such as MCP Inspector. Some clients require the MCP URL to be reachable from the public internet. For instance, Claude custom connectors connect from Anthropic's cloud infrastructure, so a local `localhost` URL is not reachable from Claude. Use a public HTTPS deployment, a tunnel, or a local MCP proxy/stdio setup when connecting Claude.
 
 ## Configuration
 
